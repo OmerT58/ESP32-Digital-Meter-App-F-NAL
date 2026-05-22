@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/ble_service.dart' as import_ble;
 
 enum MeasurementUnit { cm, mm, inches }
 
@@ -25,9 +26,12 @@ class SettingsProvider extends ChangeNotifier {
   Color           _laserColor = AppColors.laserRed;
   ThemeMode       _themeMode  = ThemeMode.dark;
 
+  bool _isSensorSimulationEnabled = false;
+
   MeasurementUnit get unit       => _unit;
   Color           get laserColor => _laserColor;
   ThemeMode       get themeMode  => _themeMode;
+  bool            get isSensorSimulationEnabled => _isSensorSimulationEnabled;
 
   static const List<Color> availableLaserColors = [
     AppColors.laserRed,
@@ -54,6 +58,12 @@ class SettingsProvider extends ChangeNotifier {
   void toggleTheme() {
     _themeMode =
         _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    notifyListeners();
+  }
+
+  void setSensorSimulationEnabled(bool enabled) {
+    _isSensorSimulationEnabled = enabled;
+    import_ble.BleService.instance.setSimulationEnabled(enabled);
     notifyListeners();
   }
 }

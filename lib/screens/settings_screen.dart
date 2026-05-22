@@ -104,6 +104,63 @@ class SettingsScreen extends StatelessWidget {
 
           const SizedBox(height: 28),
 
+          // ── Simulation section ────────────────────────────────
+          _SectionHeader('SIMULATION', secondary),
+          const SizedBox(height: 10),
+          _SoftCard(
+            isDark: isDark,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.10)
+                          : AppColors.accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.bug_report_rounded,
+                      size: 18,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('VL53L1X SIMULATION MODE',
+                            style: AppTextStyles.inter(
+                              size: 11, weight: FontWeight.w700,
+                              color: primary)),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Mock distance at 50 cm',
+                          style: AppTextStyles.inter(
+                              size: 10, color: secondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch.adaptive(
+                    value: s.isSensorSimulationEnabled,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: AppColors.accent,
+                    onChanged: (v) => context
+                        .read<SettingsProvider>()
+                        .setSensorSimulationEnabled(v),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 28),
+
           // ── Unit section ──────────────────────────────────────
           _SectionHeader('MEASUREMENT UNIT', secondary),
           const SizedBox(height: 10),

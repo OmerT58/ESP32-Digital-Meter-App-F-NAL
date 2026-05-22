@@ -57,8 +57,9 @@ class ArLaserPainter extends CustomPainter {
         _drawLine(canvas, center, tip);
       case MeasurementMode.area:
         _drawRect(canvas, size, center, tip, withDepth: false);
-      case MeasurementMode.volume:
-        _drawRect(canvas, size, center, tip, withDepth: true);
+      case MeasurementMode.test:
+        // Test mode: simple crosshair only, no AR overlay
+        break;
       case MeasurementMode.geometric:
         _drawGeometric(canvas, size);
     }

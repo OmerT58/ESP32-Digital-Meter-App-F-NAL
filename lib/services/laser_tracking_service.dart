@@ -8,23 +8,15 @@ import '../services/ble_service.dart';
 class LaserTrackingService extends ChangeNotifier {
   static const int roiSize = 200;
   static const int _missingFramesThreshold = 5;
-<<<<<<< HEAD
 
   // Orientation — updated from HomeScreen via updateSnapshotDrawing
   bool _isLandscape = false;
 
-=======
-  
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
   // State
   Offset? _trackedCentroid; // Coordinates in pixels relative to the ROI center
   String _status = 'Off Target';
   int _missingFramesCount = 0;
-<<<<<<< HEAD
 
-=======
-  
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
   // Expose basic dimensions
   double imgWidth = 0;
   double imgHeight = 0;
@@ -58,11 +50,106 @@ class LaserTrackingService extends ChangeNotifier {
   final List<Offset> _drawingPath = [];
   double? _calculatedAreaCm2;
 
-  // Two-Tap mode
+  // Measurement history (real entries, shown in drawer)
+  List<String> measureHistory = [];
+
+  // Drag-to-Box: remember the first-point 3D vector for width/height calc
+  Vector3D? _dragStartPhysical;
+  double    _lastDistanceMm = 0.0; // most recent VL53L0X reading
+
+  // Two-Tap Geometric Mode
   bool _isTwoTapMode = false;
-  Offset? _twoTapPointA;           // First tap anchor (screen coords)
-  Offset? _livePreviewPoint;       // Live crosshair position for preview line
-  int _twoTapClickCount = 0;       // 0 = waiting for 1st tap, 1 = waiting for 2nd tap
+  String selectedShape = 'Rectangle'; // 'Rectangle' or 'Circle'
+  Offset? _twoTapPointA;
+  Offset? _twoTapPointB;
+  Offset? _livePreviewPoint;
+  int _twoTapClickCount = 0;
+  Vector3D? _physicalPointA;
+  Vector3D? _physicalPointB;
+  double? _geoAreaCm2;
+  double? _geoPerimeterCm;
+
+  double currentCameraYaw = 0.0;
+  double currentCameraPitch = 0.0;
+  double sensitivityMultiplier = 15.0;
+
+  // Screen-freeze — STATE 0 ↔ STATE 1 transition
+  bool isScreenFrozen = false;
+
+  /// Toggle the freeze state.
+  /// • STATE 0 → STATE 1 (freeze): tare gyro, clear old path, freeze camera.
+  /// • STATE 1 → STATE 0 (unfreeze): reset gyro, camera resumes via caller.
+  void toggleFreeze() {
+    isScreenFrozen = !isScreenFrozen;
+    if (isScreenFrozen) {
+      currentCameraYaw   = 0.0;
+      currentCameraPitch = 0.0;
+      _drawingPath.clear();
+      _calculatedAreaCm2 = null;
+      _twoTapPointA      = null;
+      _twoTapPointB      = null;
+      _livePreviewPoint  = null;
+      _twoTapClickCount  = 0;
+      _physicalPointA    = null;
+      _physicalPointB    = null;
+      _geoAreaCm2        = null;
+      _geoPerimeterCm    = null;
+      _dragStartPhysical = null;
+    } else {
+      currentCameraYaw   = 0.0;
+      currentCameraPitch = 0.0;
+    }
+    notifyListeners();
+  }
+
+  /// Full reset — clears drawings, history, exits freeze, resumes crosshair.
+  void resetAll() {
+    isScreenFrozen     = false;
+    currentCameraYaw   = 0.0;
+    currentCameraPitch = 0.0;
+    _drawingPath.clear();
+    measureHistory.clear();
+    _calculatedAreaCm2 = null;
+    _twoTapPointA      = null;
+    _twoTapPointB      = null;
+    _livePreviewPoint  = null;
+    _twoTapClickCount  = 0;
+    _physicalPointA    = null;
+    _physicalPointB    = null;
+    _geoAreaCm2        = null;
+    _geoPerimeterCm    = null;
+    _dragStartPhysical = null;
+    notifyListeners();
+  }
+
+  // Last-known screen size — set on every updateSnapshotDrawing call
+  Size _lastScreenSize = Size.zero;
+
+  // Live pointer position — updated every BLE frame.
+  Offset _pointerPosition = Offset.zero;
+
+  void adjustSensitivity(double delta) {
+    sensitivityMultiplier = (sensitivityMultiplier + delta).clamp(0.5, 999.0);
+    notifyListeners();
+  }
+
+  /// The live screen position of the flying pointer.
+  ///
+  /// While in snapshot mode this equals the value computed by
+  /// `updateSnapshotDrawing` — i.e.:
+  ///   effectiveCenter + trackedCentroid + (gyro * multiplier)
+  ///
+  /// When NOT in snapshot mode (no BLE frames arriving) it falls back to
+  /// the center of the last-known screen so the crosshair stays visible.
+  Offset get pointerPosition {
+    // Idle: gyro forced to 0 → returns screen center (optic scope rest position).
+    // Active: returns live gyro-displaced position.
+    if (_pointerPosition != Offset.zero) return _pointerPosition;
+    return Offset(
+      _lastScreenSize.width  / 2,
+      _lastScreenSize.height / 2,
+    );
+  }
 
   Vector3D? get pointA => _pointA;
   Vector3D? get pointB => _pointB;
@@ -71,16 +158,38 @@ class LaserTrackingService extends ChangeNotifier {
   bool get isSnapshotMode => _isSnapshotMode;
   bool get isTwoTapMode => _isTwoTapMode;
   Offset? get twoTapPointA => _twoTapPointA;
+  Offset? get twoTapPointB => _twoTapPointB;
   Offset? get livePreviewPoint => _livePreviewPoint;
   List<Offset> get drawingPath => _drawingPath;
   double? get calculatedAreaCm2 => _calculatedAreaCm2;
+  double? get geoAreaCm2 => _geoAreaCm2;
+  double? get geoPerimeterCm => _geoPerimeterCm;
 
   /// Toggle between continuous-draw and two-tap modes.
   void setTwoTapMode(bool enabled) {
     _isTwoTapMode = enabled;
     _twoTapPointA = null;
+    _twoTapPointB = null;
     _livePreviewPoint = null;
     _twoTapClickCount = 0;
+    _physicalPointA = null;
+    _physicalPointB = null;
+    _geoAreaCm2 = null;
+    _geoPerimeterCm = null;
+    notifyListeners();
+  }
+
+  /// Set shape type for Two-Tap mode.
+  void setShape(String shape) {
+    selectedShape = shape;
+    // Reset taps so user starts fresh with the new shape
+    _twoTapPointA = null;
+    _twoTapPointB = null;
+    _twoTapClickCount = 0;
+    _physicalPointA = null;
+    _physicalPointB = null;
+    _geoAreaCm2 = null;
+    _geoPerimeterCm = null;
     notifyListeners();
   }
 
@@ -91,170 +200,340 @@ class LaserTrackingService extends ChangeNotifier {
        _initialAngles = Vector3D(currentRoll, currentPitch, currentYaw);
        _drawingPath.clear();
        _calculatedAreaCm2 = null;
+       currentCameraYaw   = 0.0;
+       currentCameraPitch = 0.0;
     } else {
       _drawingPath.clear();
       _calculatedAreaCm2 = null;
       _initialAngles = null;
+      currentCameraYaw   = 0.0;
+      currentCameraPitch = 0.0;
     }
     notifyListeners();
   }
 
-<<<<<<< HEAD
-  // Sidebar width that is subtracted in landscape (must match kSidebarWidth in home_screen)
+  /// Simulation-mode fast lock: immediately enters snapshot mode using the
+  /// current sensor readings as the (0,0) angular origin.
+  /// Bypasses all camera-based target detection requirements.
+  void forceSimulationLock({
+    required double distanceMm,
+    required double roll,
+    required double pitch,
+    required double yaw,
+  }) {
+    _isSnapshotMode = true;
+    _initialDistance = distanceMm / 10.0; // store in cm
+    _initialAngles   = Vector3D(roll, pitch, yaw);
+    _drawingPath.clear();
+    _calculatedAreaCm2 = null;
+    // Also reset two-tap state so drawing starts clean
+    _twoTapPointA    = null;
+    _livePreviewPoint = null;
+    _twoTapClickCount = 0;
+    _twoTapClickCount = 0;
+    currentCameraYaw = 0.0;
+    currentCameraPitch = 0.0;
+    notifyListeners();
+  }
+
+  // ── Sidebar width (must match kSidebarWidth in home_screen) ──────────────
   static const double _sidebarWidth = 84.0;
 
-  /// Converts current angle deltas to a screen-space Offset.
-  /// Matches the effectiveCenter logic in HomeScreen:
-  ///   Portrait  → centre of top 80 % of screen height
-  ///   Landscape → centre of the area to the right of the sidebar
-  Offset _anglestoScreen(double pitch, double yaw, Size screenSize,
-      {bool isLandscape = false}) {
-=======
-  /// Converts current angle deltas to a screen-space Offset relative to effectiveCenter.
-  Offset _anglestoScreen(double pitch, double yaw, Size screenSize) {
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
-    final dPitch = pitch - _initialAngles!.y;
-    final dYaw   = yaw   - _initialAngles!.z;
-
-    final d = _initialDistance;
-    final fovHRads = 60.0 * math.pi / 180.0;
-    final fovVRads = 45.0 * math.pi / 180.0;
-
-<<<<<<< HEAD
-    // Usable drawing area dimensions
-    final double usableW =
-        isLandscape ? screenSize.width - _sidebarWidth : screenSize.width;
-    final double usableH =
-        isLandscape ? screenSize.height : screenSize.height * 0.8;
-
-    final wReal = 2 * d * math.tan(fovHRads / 2);
-    final hReal = 2 * d * math.tan(fovVRads / 2);
-
-    final scaleX = wReal > 0 ? usableW / wReal : 0.0;
-    final scaleY = hReal > 0 ? usableH / hReal : 0.0;
-
-    final dx = -d * math.tan(dYaw   * math.pi / 180.0) * scaleX;
-    final dy =  d * math.tan(dPitch * math.pi / 180.0) * scaleY;
-
-    // Effective centre coordinates in screen space
-    final double startX = isLandscape
-        ? _sidebarWidth + usableW / 2
-        : screenSize.width / 2;
-    final double startY = isLandscape
-        ? screenSize.height / 2
-        : usableH / 2;
-
-    return Offset(startX + dx, startY + dy);
+  /// Returns the effective screen centre for the drawing overlay.
+  ///   Portrait  → centre of top 80% of screen height
+  ///   Landscape → centre of the area right of the sidebar
+  Offset _effectiveCenter(Size screenSize, {bool isLandscape = false}) {
+    if (isLandscape) {
+      final usableW = screenSize.width - _sidebarWidth;
+      return Offset(_sidebarWidth + usableW / 2, screenSize.height / 2);
+    }
+    return Offset(screenSize.width / 2, (screenSize.height * 0.8) / 2);
   }
 
-  void updateSnapshotDrawing(List<double> bleData, Size screenSize,
-      {bool isLandscape = false}) {
-    _isLandscape = isLandscape;
-=======
-    final wReal = 2 * d * math.tan(fovHRads / 2);
-    final hReal = 2 * d * math.tan(fovVRads / 2);
+  void updateSnapshotDrawing(
+    List<double> bleData,
+    Size screenSize, {
+    bool isLandscape = false,
+  }) {
+    _isLandscape    = isLandscape;
+    _lastScreenSize = screenSize;
 
-    final scaleX = wReal > 0 ? screenSize.width  / wReal : 0.0;
-    final scaleY = hReal > 0 ? screenSize.height / hReal : 0.0;
-
-    final dx = -d * math.tan(dYaw   * math.pi / 180.0) * scaleX; // inverted: right turn → right on screen
-    final dy =  d * math.tan(dPitch * math.pi / 180.0) * scaleY;
-
-    final startX = screenSize.width  / 2;
-    final startY = (screenSize.height * 0.8) / 2;
-    return Offset(startX + dx, startY - dy); // Pitch up → Y decreases
-  }
-
-  void updateSnapshotDrawing(List<double> bleData, Size screenSize) {
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
-    if (!_isSnapshotMode || _initialAngles == null) return;
     if (bleData.length < 5) return;
 
     final buttonState = bleData[4].toInt();
-    final pitch = bleData[2];
-    final yaw   = bleData[3];
 
+    // ── Gyro data (MPU6050) — only sent when button is held ───────────────
+    double gy = 0.0;
+    double gz = 0.0;
+    if (bleData.length >= 8) {
+      gy = bleData[6];
+      gz = bleData[7];
+    }
+    // Always capture the latest distance reading
+    if (bleData.isNotEmpty && bleData[0] > 0) {
+      _lastDistanceMm = bleData[0];
+    }
+    const double dt = 0.03;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // TEST MODE — COMPLETELY ISOLATED FROM STATE MACHINE
+    //
+    // • Camera NEVER freezes (isScreenFrozen always forced to false).
+    // • Hardware trigger held  → gyro integrates (pointer flies).
+    // • Hardware trigger released → gyro reset to 0 (pointer snaps to centre).
+    // • _drawingPath cleared every frame → canvas stays 100% blank.
+    // • Returns early — drawing / geometric logic below NEVER runs.
+    // ════════════════════════════════════════════════════════════════════════
+    if (selectedShape == 'Test') {
+      if (isScreenFrozen) {
+        isScreenFrozen = false; // Force-unfreeze — Test never freezes camera
+      }
+      if (buttonState == 1) {
+        currentCameraYaw   += (-gz) * dt;
+        currentCameraPitch += ( gy) * dt;
+      } else {
+        // Snap crosshair back to centre when trigger released
+        currentCameraYaw   = 0.0;
+        currentCameraPitch = 0.0;
+      }
+      final double px = (screenSize.width  / 2) + (currentCameraYaw   * sensitivityMultiplier);
+      final double py = (screenSize.height / 2) + (currentCameraPitch * sensitivityMultiplier);
+      _pointerPosition = Offset(px, py);
+      _drawingPath.clear(); // Enforce blank canvas — no residual lines
+      _lastButtonState = buttonState;
+      notifyListeners();
+      return; // ← Exit. Drawing / geometric / freeze logic below skipped.
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // STATE MACHINE (Rectangle / Circle draw modes only)
+    //
+    //  STATE 0 — isScreenFrozen == false (LIVE VIEW)
+    //    • Camera stream is live (processImage runs normally)
+    //    • Force gyro angles to 0 → crosshair stays LOCKED at screen centre
+    //    • Hardware trigger is IGNORED for drawing
+    //
+    //  STATE 1 — isScreenFrozen == true (FROZEN / DRAWING)
+    //    • Camera frame is frozen (processImage returns early)
+    //    • Gyro integrates freely → crosshair acts as flying mouse pointer
+    //    • Hardware trigger held → every frame appends pointer to _drawingPath
+    //    • Two-Tap mode: rising edge of trigger captures A then B, computes geo
+    // ════════════════════════════════════════════════════════════════════════
+
+    if (!isScreenFrozen) {
+      // ── STATE 0: live view ──────────────────────────────────────────────
+      currentCameraYaw   = 0.0;
+      currentCameraPitch = 0.0;
+      _pointerPosition   = Offset(screenSize.width / 2, screenSize.height / 2);
+      _lastButtonState   = buttonState;
+      notifyListeners();
+      return;
+    }
+
+
+    // ── STATE 1: frozen — integrate gyro ───────────────────────────────────
+    if (buttonState == 1 && _lastButtonState == 0) {
+      // Rising edge: tare gyro so pointer starts from its current position
+      // (do NOT reset to 0 here — user may have already moved the crosshair)
+    }
+    if (buttonState == 1 || _lastButtonState == 1) {
+      // Integrate while held OR on the frame button is released
+      // Yaw: invert Z → left turn = pointer left
+      currentCameraYaw   += (-gz) * dt;
+      currentCameraPitch += ( gy) * dt;
+    }
+
+    // ── Pointer position (screen-space) ─────────────────────────────────
+    final double pointerX = (screenSize.width  / 2) + (currentCameraYaw   * sensitivityMultiplier);
+    final double pointerY = (screenSize.height / 2) + (currentCameraPitch * sensitivityMultiplier);
+    final Offset currentPointer = Offset(pointerX, pointerY);
+    _pointerPosition = currentPointer;
+
+    // ── TWO-TAP mode ─────────────────────────────────────────────────────
     if (_isTwoTapMode) {
-      // ── Two-Tap Mode ──────────────────────────────────────────
-<<<<<<< HEAD
-      final currentPt =
-          _anglestoScreen(pitch, yaw, screenSize, isLandscape: isLandscape);
-=======
-      final currentPt = _anglestoScreen(pitch, yaw, screenSize);
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
+      _livePreviewPoint = currentPointer;
 
-      // Always update the live preview position
-      _livePreviewPoint = currentPt;
+      final isRisingEdge = (buttonState == 1 && _lastButtonState == 0);
+      if (isRisingEdge) {
+        // Build physical 3D point from VL53L0X distance + MPU angles
+        Vector3D? physPt;
+        if (bleData.isNotEmpty) {
+          final distMm = bleData[0];
+          if (distMm > 0) {
+            final dCm    = distMm / 10.0;
+            final pitchR = currentCameraPitch * (math.pi / 180.0);
+            final yawR   = currentCameraYaw   * (math.pi / 180.0);
+            physPt = Vector3D(
+              dCm * math.sin(yawR),                       // X
+              dCm * math.sin(pitchR),                     // Y
+              dCm * math.cos(pitchR) * math.cos(yawR),   // Z (depth)
+            );
+          }
+        }
 
-      final isClick = (buttonState == 1 && _lastButtonState == 0);
-      if (isClick) {
         if (_twoTapClickCount == 0) {
-          // First click → capture Point A
-          _twoTapPointA   = currentPt;
+          // TAP 1 — set anchor
+          _twoTapPointA     = currentPointer;
+          _twoTapPointB     = null;
+          _physicalPointA   = physPt;
+          _physicalPointB   = null;
+          _geoAreaCm2       = null;
+          _geoPerimeterCm   = null;
           _twoTapClickCount = 1;
         } else {
-          // Second click → draw permanent line A→B
-          if (_twoTapPointA != null) {
-            _drawingPath.add(_twoTapPointA!);
-            _drawingPath.add(currentPt);
-            // Keep pointA as new anchor for connected lines
-            _twoTapPointA   = currentPt;
-            // Stay in _twoTapClickCount == 1 so next click is the next B
+          // TAP 2 — finalize shape + compute real-world geometry
+          _twoTapPointB     = currentPointer;
+          _physicalPointB   = physPt;
+          _twoTapClickCount = 0;
+
+          if (_physicalPointA != null && _physicalPointB != null) {
+            final pa = _physicalPointA!;
+            final pb = _physicalPointB!;
+            if (selectedShape == 'Circle') {
+              final diameter      = pa.distanceTo(pb);
+              final radius        = diameter / 2.0;
+              _geoAreaCm2     = math.pi * radius * radius;
+              _geoPerimeterCm = 2.0 * math.pi * radius;
+              measureHistory.add(
+                'Daire ─ Alan: ${_geoAreaCm2!.toStringAsFixed(2)} cm²  '
+                'Çevre: ${_geoPerimeterCm!.toStringAsFixed(2)} cm',
+              );
+            } else {
+              final w         = (pb.x - pa.x).abs();
+              final h         = (pb.y - pa.y).abs();
+              _geoAreaCm2     = w * h;
+              _geoPerimeterCm = 2.0 * (w + h);
+              measureHistory.add(
+                'Dikdörtgen ─ Alan: ${_geoAreaCm2!.toStringAsFixed(2)} cm²  '
+                'Çevre: ${_geoPerimeterCm!.toStringAsFixed(2)} cm',
+              );
+            }
           }
         }
-        notifyListeners();
-      } else {
-        // Just live preview movement
-        notifyListeners();
       }
+
     } else {
-      // ── Continuous Draw Mode ──────────────────────────────────
-      if (buttonState == 1) {
-<<<<<<< HEAD
-        final currentPt =
-            _anglestoScreen(pitch, yaw, screenSize, isLandscape: isLandscape);
-=======
-        final currentPt = _anglestoScreen(pitch, yaw, screenSize);
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
-        if (_drawingPath.isEmpty || (_drawingPath.last - currentPt).distance > 2.0) {
-          _drawingPath.add(currentPt);
-          notifyListeners();
+      // ── CONTINUOUS draw mode ─────────────────────────────────────────────
+      // TEST mode: trigger only moves the crosshair — no drawing at all.
+      if (selectedShape != 'Test' && buttonState == 1) {
+        _drawingPath.add(currentPointer);
+        // On the very first held frame, record the 3D start point
+        if (_lastButtonState == 0) {
+          _dragStartPhysical = _build3dPoint();
         }
-      } else if (_lastButtonState == 1 && buttonState == 0) {
-        // Button released → close shape if endpoints are close
-        if (_drawingPath.length > 2) {
-          final distToStart = (_drawingPath.first - _drawingPath.last).distance;
-          if (distToStart < 40.0) {
-            _drawingPath.add(_drawingPath.first);
-            _calculateArea(screenSize);
+      }
+
+      // ── FALLING EDGE: trigger released ─────────────────────────────────
+      if (_lastButtonState == 1 && buttonState == 0 && _drawingPath.length >= 2) {
+        final startPt = _drawingPath.first;
+        final endPt   = _drawingPath.last;
+        final endPhys = _build3dPoint(); // 3D vector at release moment
+
+        if (selectedShape == 'Circle') {
+          // ── DRAG-TO-CIRCLE ─────────────────────────────────────────────
+          // first & last define the DIAMETER
+          final cx = (startPt.dx + endPt.dx) / 2.0;
+          final cy = (startPt.dy + endPt.dy) / 2.0;
+          final r  = (startPt - Offset(cx, cy)).distance;
+
+          // Replace freehand stroke with 60-point screen circle
+          _drawingPath.clear();
+          const int steps = 60;
+          const double twoPi = 2.0 * math.pi;
+          for (int i = 0; i <= steps; i++) {
+            final angle = i * (twoPi / steps);
+            _drawingPath.add(Offset(cx + r * math.cos(angle),
+                                    cy + r * math.sin(angle)));
           }
+
+          // Real 3D diameter from VL53L0X + MPU angular delta
+          double realRadius = r / 10.0; // px fallback → treat as mm→cm
+          if (_dragStartPhysical != null) {
+            final pa = _dragStartPhysical!;
+            final pb = endPhys;
+            final realDiameter = pa.distanceTo(pb);
+            realRadius = realDiameter / 2.0;
+          }
+
+          _geoAreaCm2     = math.pi * realRadius * realRadius;
+          _geoPerimeterCm = 2.0 * math.pi * realRadius;
+
+          measureHistory.add(
+            'Daire \u2500 Alan: ${_geoAreaCm2!.toStringAsFixed(2)} cm\u00b2  '
+            '\u00c7evre: ${_geoPerimeterCm!.toStringAsFixed(2)} cm',
+          );
+
+        } else {
+          // ── DRAG-TO-RECTANGLE ──────────────────────────────────────────
+          _drawingPath
+            ..clear()
+            ..add(startPt)                            // top-left
+            ..add(Offset(endPt.dx, startPt.dy))      // top-right
+            ..add(endPt)                              // bottom-right
+            ..add(Offset(startPt.dx, endPt.dy))      // bottom-left
+            ..add(startPt);                           // close
+
+          double areaCm2 = 0.0, perimeterCm = 0.0;
+          if (_dragStartPhysical != null) {
+            final pa = _dragStartPhysical!;
+            final pb = endPhys;
+            final w = (pb.x - pa.x).abs();
+            final h = (pb.y - pa.y).abs();
+            areaCm2     = w * h;
+            perimeterCm = 2.0 * (w + h);
+          } else {
+            final dx = (endPt.dx - startPt.dx).abs();
+            final dy = (endPt.dy - startPt.dy).abs();
+            areaCm2     = dx * dy;
+            perimeterCm = 2.0 * (dx + dy);
+          }
+
+          _geoAreaCm2     = areaCm2;
+          _geoPerimeterCm = perimeterCm;
+
+          measureHistory.add(
+            'Dikd\u00f6rtgen \u2500 Alan: ${areaCm2.toStringAsFixed(2)} cm\u00b2  '
+            '\u00c7evre: ${perimeterCm.toStringAsFixed(2)} cm',
+          );
         }
+
+        _dragStartPhysical = null;
       }
     }
+
+
     _lastButtonState = buttonState;
+    notifyListeners(); // CRITICAL: repaint canvas every frame in STATE 1
   }
 
-  void _calculateArea(Size screenSize) {
-    if (_drawingPath.length < 3) return;
-    double areaPx = 0.0;
-    for (int i = 0; i < _drawingPath.length - 1; i++) {
-      areaPx += _drawingPath[i].dx * _drawingPath[i+1].dy;
-      areaPx -= _drawingPath[i+1].dx * _drawingPath[i].dy;
-    }
-    areaPx = (areaPx.abs()) / 2.0;
+  /// Build a real-world 3D point from the current gyro angles + last VL53L0X distance.
+  Vector3D _build3dPoint() {
+    final dCm    = _lastDistanceMm / 10.0;
+    final pitchR = currentCameraPitch * (math.pi / 180.0);
+    final yawR   = currentCameraYaw   * (math.pi / 180.0);
+    return Vector3D(
+      dCm * math.sin(yawR),
+      dCm * math.sin(pitchR),
+      dCm * math.cos(pitchR) * math.cos(yawR),
+    );
+  }
 
-    final d = _initialDistance; // in cm
-    final fovHRads = 60.0 * math.pi / 180.0;
-    final fovVRads = 45.0 * math.pi / 180.0;
-    final wReal = 2 * d * math.tan(fovHRads / 2);
-    final hReal = 2 * d * math.tan(fovVRads / 2);
-    
-    final pixelAreaInCm2 = (wReal / screenSize.width) * (hReal / screenSize.height);
-    _calculatedAreaCm2 = areaPx * pixelAreaInCm2;
+  /// Shoelace area in screen pixels² (the painter canvas IS the screen).
+  void _calculateArea() {
+
+    if (_drawingPath.length < 3) return;
+    double area = 0.0;
+    for (int i = 0; i < _drawingPath.length - 1; i++) {
+      area += _drawingPath[i].dx * _drawingPath[i + 1].dy;
+      area -= _drawingPath[i + 1].dx * _drawingPath[i].dy;
+    }
+    _calculatedAreaCm2 = area.abs() / 2.0; // stored as px² for now
     notifyListeners();
   }
 
   void processImage(CameraImage image, BleService bleService) {
+    // Freeze: skip all CV processing while screen is frozen
+    if (isScreenFrozen) return;
     if (_isProcessing) return;
     _isProcessing = true;
 
@@ -264,7 +543,6 @@ class LaserTrackingService extends ChangeNotifier {
       
       int roiCenterRawX;
       int roiCenterRawY;
-<<<<<<< HEAD
 
       // The camera sensor stream is rotated relative to the screen.
       // imgWidth > imgHeight means the raw sensor is landscape-rotated.
@@ -308,19 +586,6 @@ class LaserTrackingService extends ChangeNotifier {
           roiCenterRawX = (imgWidth / 2).toInt();
           roiCenterRawY = ((imgHeight * 0.8) / 2).toInt();
         }
-=======
-      
-      // Calculate ROI coordinates mapping screen top-80% center to raw sensor
-      if (imgWidth > imgHeight) {
-        // Rotated 90 degrees (landscape sensor on portrait screen)
-        // Screen Y maps to Sensor X. Screen X maps to Sensor Y.
-        roiCenterRawX = ((imgWidth * 0.8) / 2).toInt();
-        roiCenterRawY = (imgHeight / 2).toInt();
-      } else {
-        // Portrait sensor
-        roiCenterRawX = (imgWidth / 2).toInt();
-        roiCenterRawY = ((imgHeight * 0.8) / 2).toInt();
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
       }
       
       final roiStartX = roiCenterRawX - (roiSize ~/ 2);
@@ -478,13 +743,8 @@ class LaserTrackingService extends ChangeNotifier {
         
         _trackedCentroid = _emaCentroid;
         _missingFramesCount = 0;
-        
-        final double distToCenter = math.sqrt(_trackedCentroid!.dx * _trackedCentroid!.dx + _trackedCentroid!.dy * _trackedCentroid!.dy);
-        if (distToCenter <= 15.0) {
-          _status = 'On Target';
-        } else {
-          _status = 'Off Target';
-        }
+        // Status is purely informational — does NOT gate drawing or measurement
+        _status = 'On Target';
       } else {
         double rawDispX = maxImgX - roiCenterRawX.toDouble();
         double rawDispY = maxImgY - roiCenterRawY.toDouble();
@@ -509,33 +769,29 @@ class LaserTrackingService extends ChangeNotifier {
         final pitchDeg = bleService.latestData[2];
         final buttonState = bleService.latestData[4].toInt();
 
-        if (_status == 'On Target' && distanceMm > 0) {
-          final d = distanceMm / 10.0; // convert to cm
-          final roll = rollDeg * math.pi / 180.0;
+        if (distanceMm > 0) {
+          final d = distanceMm / 10.0;
+          final roll  = rollDeg  * math.pi / 180.0;
           final pitch = pitchDeg * math.pi / 180.0;
-          
+
           final z = d * math.cos(pitch) * math.cos(roll);
           final x = d * math.sin(roll);
           final y = d * math.sin(pitch);
-          
+
           final currentPoint = Vector3D(x, y, z);
-          
+
           if (buttonState == 1 && _lastButtonState == 0) {
-            // Button Pressed
             if (!_isRecording) {
-              // Start measuring: Point A
               _pointA = currentPoint;
               _pointB = null;
               _measuredDistanceCm = null;
               _isRecording = true;
             } else {
-              // Stop measuring: Point B
               _pointB = currentPoint;
               _measuredDistanceCm = _pointA!.distanceTo(_pointB!);
               _isRecording = false;
             }
           } else if (_isRecording) {
-            // Continuously update distance while in recording mode
             _measuredDistanceCm = _pointA!.distanceTo(currentPoint);
           }
         }

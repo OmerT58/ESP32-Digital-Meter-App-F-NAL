@@ -117,7 +117,13 @@ class _CameraControlsState extends State<CameraControls> {
                                   mp.undo();
                                 },
                               ),
-                              _MeasureButton(mp: mp, ble: ble),
+                              // Measure button — HIDDEN in Test mode only.
+                              // User can still see the drawer and switch shapes.
+                              if (tracker.selectedShape != 'Test')
+                                _MeasureButton(tracker: tracker)
+                              else
+                                const SizedBox(width: 72, height: 72),
+
                               _SideBtn(
                                 icon: Icons.refresh_rounded,
                                 label: 'RESET',
@@ -125,10 +131,8 @@ class _CameraControlsState extends State<CameraControls> {
                                 onTap: () {
                                   HapticFeedback.lightImpact();
                                   mp.reset();
-                                  final tracker = context.read<LaserTrackingService>();
-                                  tracker.toggleSnapshotMode(false);
-                                  final cam = context.read<CameraService>();
-                                  cam.controller?.resumePreview();
+                                  tracker.resetAll(); // clears path, history, unfreezes
+                                  context.read<CameraService>().controller?.resumePreview();
                                 },
                               ),
                             ],
@@ -149,37 +153,52 @@ class _CameraControlsState extends State<CameraControls> {
                                 _ResultBand(mp: mp, ble: ble, s: s, isDark: isDark),
                                 const SizedBox(height: 24),
 
-                                // Mode toggles
+                                const SizedBox(height: 4),
+
+                                // ── SHAPE SELECTOR: single source of truth ─────────────────
+                                // Rectangle | Daire | Test
+                                // Test = crosshair only, no lines drawn on canvas.
                                 Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 20),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      _ModeTogglePlaceholder(
-                                        label: 'Continuous Mode',
-                                        active: !tracker.isTwoTapMode,
+                                      _ShapeBtn(
+                                        label: 'Kare',
+                                        icon: Icons.crop_square_rounded,
+                                        active: tracker.selectedShape == 'Rectangle',
                                         onTap: () {
                                           HapticFeedback.selectionClick();
-                                          tracker.setTwoTapMode(false);
+                                          tracker.setShape('Rectangle');
                                         },
+                                        isDark: isDark,
                                       ),
-                                      const SizedBox(width: 12),
-                                      _ModeTogglePlaceholder(
-                                        label: '2-Tap Mode',
-                                        active: tracker.isTwoTapMode,
+                                      const SizedBox(width: 8),
+                                      _ShapeBtn(
+                                        label: 'Daire',
+                                        icon: Icons.circle_outlined,
+                                        active: tracker.selectedShape == 'Circle',
                                         onTap: () {
                                           HapticFeedback.selectionClick();
-                                          tracker.setTwoTapMode(true);
+                                          tracker.setShape('Circle');
                                         },
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _ShapeBtn(
+                                        label: 'Test',
+                                        icon: Icons.science_rounded,
+                                        active: tracker.selectedShape == 'Test',
+                                        onTap: () {
+                                          HapticFeedback.selectionClick();
+                                          tracker.setShape('Test');
+                                        },
+                                        isDark: isDark,
                                       ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(height: 14),
-
-                                // Geometric sub-selector
-                                if (mp.mode == MeasurementMode.geometric)
-                                  _GeoSubSelector(mp: mp, isDark: isDark),
+                                const SizedBox(height: 8),
 
                                 // PageView mode strip
                                 SizedBox(
@@ -214,12 +233,57 @@ class _CameraControlsState extends State<CameraControls> {
                                   padding: const EdgeInsets.all(16.0),
                                   child: Align(
                                     alignment: Alignment.centerLeft,
-                                    child: Text('MEASUREMENT HISTORY', style: AppTextStyles.inter(size: 11, weight: FontWeight.w600, color: isDark ? Colors.white54 : Colors.black54)),
+                                    child: Text(
+                                      'ÖLÇÜM GEÇMİŞİ',
+                                      style: AppTextStyles.inter(
+                                        size: 11,
+                                        weight: FontWeight.w600,
+                                        color: isDark ? Colors.white54 : Colors.black54,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                _HistoryItem(title: 'Distance', value: '1.24 m', icon: Icons.straighten, isDark: isDark),
-                                _HistoryItem(title: 'Area', value: '4.50 m²', icon: Icons.square_foot, isDark: isDark),
-                                _HistoryItem(title: 'Volume', value: '12.0 m³', icon: Icons.view_in_ar, isDark: isDark),
+
+                                // Real history list from tracker
+                                if (tracker.measureHistory.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                    child: Text(
+                                      'Henüz ölçüm yok.',
+                                      style: AppTextStyles.inter(
+                                        size: 12,
+                                        color: isDark ? Colors.white38 : Colors.black38,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  ListView.builder(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: tracker.measureHistory.length,
+                                    itemBuilder: (_, i) {
+                                      // Reverse so newest entry is on top
+                                      final entry = tracker.measureHistory[
+                                        tracker.measureHistory.length - 1 - i
+                                      ];
+                                      final isRect = entry.startsWith('Dikd');
+                                      return ListTile(
+                                        dense: true,
+                                        leading: Icon(
+                                          isRect ? Icons.crop_square_rounded : Icons.circle_outlined,
+                                          size: 18,
+                                          color: AppColors.accent,
+                                        ),
+                                        title: Text(
+                                          entry,
+                                          style: AppTextStyles.inter(
+                                            size: 12,
+                                            color: isDark ? Colors.white70 : Colors.black87,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 const SizedBox(height: 40),
                               ],
                             ),
@@ -264,6 +328,147 @@ class _ModeTogglePlaceholder extends StatelessWidget {
             color: active ? AppColors.accent : Colors.grey,
             weight: FontWeight.w600,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Geo result band (Area + Perimeter after 2-tap) ───────────────────────────
+class _GeoResultBand extends StatelessWidget {
+  const _GeoResultBand({required this.tracker, required this.isDark});
+  final LaserTrackingService tracker;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final area      = tracker.geoAreaCm2;
+    final perimeter = tracker.geoPerimeterCm;
+    final shape     = tracker.selectedShape;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark
+              ? AppColors.accent.withOpacity(0.10)
+              : AppColors.accent.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.accent.withOpacity(0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              shape == 'Circle' ? '⬤ Daire Sonuçları' : '⬛ Dikdörtgen Sonuçları',
+              style: AppTextStyles.inter(
+                size: 10, weight: FontWeight.w700,
+                color: AppColors.accent, letterSpacing: 1.1,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _GeoStat(
+                  label: 'Alan',
+                  value: area != null
+                      ? (area >= 10000
+                          ? '${(area / 10000).toStringAsFixed(3)} m²'
+                          : '${area.toStringAsFixed(1)} cm²')
+                      : '—',
+                  isDark: isDark,
+                ),
+                _GeoStat(
+                  label: 'Çevre',
+                  value: perimeter != null
+                      ? '${perimeter.toStringAsFixed(1)} cm'
+                      : '—',
+                  isDark: isDark,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GeoStat extends StatelessWidget {
+  const _GeoStat({required this.label, required this.value, required this.isDark});
+  final String label;
+  final String value;
+  final bool   isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+          style: AppTextStyles.inter(
+            size: 9, weight: FontWeight.w500,
+            color: isDark ? Colors.white38 : Colors.black38,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(value,
+          style: AppTextStyles.inter(
+            size: 18, weight: FontWeight.w700,
+            color: isDark ? Colors.white : Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShapeBtn extends StatelessWidget {
+  const _ShapeBtn({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+    required this.isDark,
+  });
+  final String       label;
+  final IconData     icon;
+  final bool         active;
+  final VoidCallback onTap;
+  final bool         isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? AppColors.accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? AppColors.accent : AppColors.textTertiary,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: active ? Colors.white : AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: AppTextStyles.inter(
+                size: 9,
+                color: active ? Colors.white : AppColors.textSecondary,
+                weight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -386,9 +591,9 @@ class _ResultBand extends StatelessWidget {
         final double estimatedVolumeM3 = estimatedAreaM2 * (distanceM * math.sin(pitchRad.abs()));
 
         final String labelText = switch (mp.mode) {
-          MeasurementMode.line => 'DISTANCE',
-          MeasurementMode.area => 'AREA',
-          MeasurementMode.volume => 'VOLUME',
+          MeasurementMode.line      => 'DISTANCE',
+          MeasurementMode.area      => 'AREA',
+          MeasurementMode.test      => 'TEST / KALIBRASYON',
           MeasurementMode.geometric => 'GEOMETRIC',
         };
 
@@ -397,8 +602,8 @@ class _ResultBand extends StatelessWidget {
             '${unit.convert(horizontalM).toStringAsFixed(2)} ${unit.label}',
           MeasurementMode.area =>
             '${estimatedAreaM2.toStringAsFixed(4)} m²',
-          MeasurementMode.volume =>
-            '${estimatedVolumeM3.toStringAsFixed(4)} m³',
+          MeasurementMode.test =>
+            'CROSSHAIR AKTIF — FOV: ${context.read<LaserTrackingService>().sensitivityMultiplier.toStringAsFixed(1)}',
           MeasurementMode.geometric =>
             _geoResult(mp, horizontalM, unit),
         };
@@ -472,58 +677,28 @@ class _ResultBand extends StatelessWidget {
   }
 }
 
-// ── Main MEASURE button ──────────────────────────────────────────
-/// Large Soft UI button with a subtle target/crosshair icon.
-/// Outer ring = white with blue shadow, inner = blue gradient.
+// ── Main MEASURE button — STATE 0 ↔ STATE 1 shutter ────────────────────────
 class _MeasureButton extends StatelessWidget {
-  const _MeasureButton({required this.mp, required this.ble});
-  final MeasurementProvider mp;
-  final BleService          ble;
+  const _MeasureButton({required this.tracker});
+  final LaserTrackingService tracker;
 
   @override
   Widget build(BuildContext context) {
+    final frozen = tracker.isScreenFrozen; // STATE 1 = frozen
     return GestureDetector(
       onTap: () {
         HapticFeedback.mediumImpact();
-        final tracker = context.read<LaserTrackingService>();
-        if (tracker.status == 'On Target' && ble.latestData.length >= 4) {
-          final cam = context.read<CameraService>();
-<<<<<<< HEAD
-          tracker.toggleSnapshotMode(true,
-=======
-          tracker.toggleSnapshotMode(true, 
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
-             currentDist: ble.latestData[0] / 10.0,
-             currentRoll: ble.latestData[1],
-             currentPitch: ble.latestData[2],
-             currentYaw: ble.latestData[3],
-          );
+        final cam = context.read<CameraService>();
+        tracker.toggleFreeze();             // flip state machine
+        if (!frozen) {
+          // Entering STATE 1: freeze the camera visual frame
           cam.controller?.pausePreview();
-        } else if (tracker.trackedCentroid != null) {
-<<<<<<< HEAD
-          // Portrait: effective centre is top-80% mid-point
-          final size = MediaQuery.sizeOf(context);
-          final ecX = size.width / 2;
-          final ecY = (size.height * 0.8) / 2;
-          final pt = Offset(
-            (ecX + tracker.trackedCentroid!.dx) / size.width,
-            (ecY + tracker.trackedCentroid!.dy) / size.height,
-          );
-          mp.capture(pt);
         } else {
-          mp.capture(const Offset(0.5, 0.4));
-=======
-          final size = MediaQuery.sizeOf(context);
-          final pt = Offset(
-            (size.width / 2 + tracker.trackedCentroid!.dx) / size.width,
-            ((size.height * 0.8) / 2 + tracker.trackedCentroid!.dy) / size.height,
-          );
-          mp.capture(pt);
-        } else {
-          mp.capture(const Offset(0.5, 0.4)); // 0.4 is 80% / 2
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
+          // Entering STATE 0: resume live camera
+          cam.controller?.resumePreview();
         }
       },
+
       child: Container(
         width: 72, height: 72,
         decoration: BoxDecoration(
@@ -531,26 +706,111 @@ class _MeasureButton extends StatelessWidget {
           color: Colors.white.withOpacity(0.1),
           boxShadow: [
             BoxShadow(
-              color: AppColors.accent.withOpacity(0.4),
-              blurRadius: 20,
-              spreadRadius: 2,
+              color: (frozen ? Colors.redAccent : AppColors.accent).withOpacity(0.45),
+              blurRadius: 22,
+              spreadRadius: 3,
             ),
           ],
           border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 1.5),
+            color: frozen
+                ? Colors.redAccent.withOpacity(0.8)
+                : Colors.white.withOpacity(0.3),
+            width: 1.8,
+          ),
         ),
         child: Center(
           child: Container(
             width: 56, height: 56,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.accent,
+              color: frozen ? Colors.redAccent : AppColors.accent,
             ),
-            child: const Icon(Icons.gps_fixed_rounded,
-                size: 28, color: Colors.white),
+            child: Icon(
+              frozen ? Icons.lock_rounded : Icons.camera_rounded,
+              size: 28,
+              color: Colors.white,
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── FOV Tuner: right-side floating sensitivity panel ─────────────────────────
+class _FovTuner extends StatelessWidget {
+  const _FovTuner({required this.tracker, required this.isDark});
+  final LaserTrackingService tracker;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 54,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF0F1117).withOpacity(0.72)
+            : Colors.white.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.accent.withOpacity(0.15),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'FOV',
+            style: AppTextStyles.inter(
+              size: 8,
+              weight: FontWeight.w700,
+              color: isDark ? Colors.white54 : Colors.black45,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // +
+          GestureDetector(
+            onTap: () => tracker.adjustSensitivity(0.5),
+            child: Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withOpacity(0.15),
+              ),
+              child: const Icon(Icons.add, size: 18, color: AppColors.accent),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            tracker.sensitivityMultiplier.toStringAsFixed(1),
+            style: AppTextStyles.inter(
+              size: 11,
+              weight: FontWeight.w700,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 4),
+          // -
+          GestureDetector(
+            onTap: () => tracker.adjustSensitivity(-0.5),
+            child: Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withOpacity(0.15),
+              ),
+              child: const Icon(Icons.remove, size: 18, color: AppColors.accent),
+            ),
+          ),
+        ],
       ),
     );
   }

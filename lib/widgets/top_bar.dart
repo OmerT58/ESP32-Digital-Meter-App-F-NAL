@@ -30,6 +30,7 @@ class TopBar extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
           child: Row(
+            mainAxisSize: MainAxisSize.max,
             children: [
               // ── BLE status pill ─────────────────────────────
               GestureDetector(
@@ -42,26 +43,13 @@ class TopBar extends StatelessWidget {
                       .copyWith(borderRadius: BorderRadius.circular(20)),
                   child: Text(label,
                       style: AppTextStyles.inter(
-                          size: 10, color: color)),
+                          size: 10, color: color),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1),
                 ),
               ),
 
-              const Spacer(),
-
-              // ── Title pill ───────────────────────────────────
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 7),
-                decoration: softCard(warm: true)
-                    .copyWith(borderRadius: BorderRadius.circular(20)),
-                child: Text(
-                  'DIGITAL METER',
-                  style: AppTextStyles.inter(
-                    size: 10, weight: FontWeight.w700,
-                    color: AppColors.textPrimary, letterSpacing: 2),
-                ),
-              ),
-
+              // Single spacer pushes right-side group to the edge
               const Spacer(),
 
               // ── Test Mode pill ───────────────────────────────
@@ -77,11 +65,18 @@ class TopBar extends StatelessWidget {
                   ),
                 ),
                 child: Container(
-                  padding: const EdgeInsets.all(9),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   decoration: softCard(warm: false)
                       .copyWith(borderRadius: BorderRadius.circular(14)),
-                  child: const Icon(Icons.screen_rotation_rounded,
-                      size: 16, color: AppColors.textSecondary),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.explore,
+                          size: 14, color: AppColors.textSecondary),
+                      const SizedBox(width: 6),
+                      Text('BUBBLE LEVEL', style: AppTextStyles.inter(size: 9, color: AppColors.textSecondary, weight: FontWeight.w700)),
+                    ]
+                  ),
                 ),
               ),
 
@@ -109,4 +104,3 @@ class TopBar extends StatelessWidget {
     );
   }
 }
-

@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:vector_math/vector_math_64.dart' as vmath;
 import '../services/ble_service.dart';
 
 class GyroscopeTestScreen extends StatelessWidget {
@@ -12,29 +11,28 @@ class GyroscopeTestScreen extends StatelessWidget {
       backgroundColor: const Color(0xFF050505),
       body: Stack(
         children: [
-          // Pure 3D visualization
           Positioned.fill(
             child: StreamBuilder<List<double>>(
               stream: BleService.instance.dataStream,
               initialData: BleService.instance.latestData,
               builder: (context, snapshot) {
-                final data = snapshot.data ?? [0.0, 0.0, 0.0];
-                return _PureVisualizer(
-                  x: data[0],
-                  y: data[1],
-                  z: data[2],
+                final data = snapshot.data ?? [0.0, 0.0, 0.0, 0.0];
+                final double roll = data.length > 1 ? data[1] : 0.0;
+                final double pitch = data.length > 2 ? data[2] : 0.0;
+                return _BubbleLevelVisualizer(
+                  roll: roll,
+                  pitch: pitch,
                 );
               },
             ),
           ),
-          // Ghost-like Back Button
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             left: 16,
             child: IconButton(
               icon: const Icon(
                 Icons.arrow_back_ios_new_rounded,
-                color: Color(0x4DE5E7EB), // Ghost-like 30% opacity white
+                color: Color(0x4DE5E7EB),
               ),
               onPressed: () => Navigator.pop(context),
               splashColor: Colors.transparent,
@@ -47,43 +45,33 @@ class GyroscopeTestScreen extends StatelessWidget {
   }
 }
 
-class _PureVisualizer extends StatelessWidget {
-  const _PureVisualizer({
-    required this.x,
-    required this.y,
-    required this.z,
+class _BubbleLevelVisualizer extends StatelessWidget {
+  const _BubbleLevelVisualizer({
+    required this.roll,
+    required this.pitch,
   });
 
-  final double x;
-  final double y;
-  final double z;
+  final double roll;
+  final double pitch;
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       duration: const Duration(milliseconds: 150),
       curve: Curves.easeOutCubic,
-      tween: Tween<double>(begin: x, end: x),
-      builder: (context, animX, child) {
+      tween: Tween<double>(begin: roll, end: roll),
+      builder: (context, animRoll, child) {
         return TweenAnimationBuilder<double>(
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOutCubic,
-          tween: Tween<double>(begin: y, end: y),
-          builder: (context, animY, child) {
-            return TweenAnimationBuilder<double>(
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOutCubic,
-              tween: Tween<double>(begin: z, end: z),
-              builder: (context, animZ, child) {
-                return CustomPaint(
-                  size: Size.infinite,
-                  painter: DeviceRotationPainter(
-                    x: animX,
-                    y: animY,
-                    z: animZ,
-                  ),
-                );
-              },
+          tween: Tween<double>(begin: pitch, end: pitch),
+          builder: (context, animPitch, child) {
+            return CustomPaint(
+              size: Size.infinite,
+              painter: BubbleLevelPainter(
+                roll: animRoll,
+                pitch: animPitch,
+              ),
             );
           },
         );
@@ -92,113 +80,125 @@ class _PureVisualizer extends StatelessWidget {
   }
 }
 
-class DeviceRotationPainter extends CustomPainter {
-  DeviceRotationPainter({
-    required this.x,
-    required this.y,
-    required this.z,
+class BubbleLevelPainter extends CustomPainter {
+  BubbleLevelPainter({
+    required this.roll,
+    required this.pitch,
   });
 
-  final double x;
-  final double y;
-  final double z;
+  final double roll;
+  final double pitch;
 
   @override
   void paint(Canvas canvas, Size size) {
     final double cx = size.width / 2;
     final double cy = size.height / 2;
 
-    canvas.translate(cx, cy);
+    final bool isLevel = roll.abs() <= 1.0 && pitch.abs() <= 1.0;
+    
+    final Color activeColor = isLevel ? Colors.greenAccent : Colors.cyanAccent;
+    final Color inactiveColor = const Color(0xFF333333);
 
-    double xRad = x * math.pi / 180.0;
-    double yRad = y * math.pi / 180.0;
-    double zRad = z * math.pi / 180.0;
+    // Max angle represented by the edge of the circle (e.g. 45 degrees)
+    const double maxAngle = 45.0;
+    
+    // Outer vial body radius
+    final double maxRadius = math.min(size.width, size.height) * 0.35;
+    
+    // Background of the level
+    final Paint bgPaint = Paint()
+      ..color = const Color(0xFF0A0A0A)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(cx, cy), maxRadius, bgPaint);
 
-    final vmath.Matrix4 transform = vmath.Matrix4.identity()
-      ..setEntry(3, 2, 0.0018) // Perspective
-      ..scale(2.0, 2.0, 2.0)
-      ..rotateX(xRad)
-      ..rotateY(yRad)
-      ..rotateZ(zRad);
-
-    // Geometry: Nose(0,0,100), Tail(0,0,-40), WingLeft(-60,10,-30), WingRight(60,10,-30), Keel(0,-20,-10)
-    List<vmath.Vector3> pts = [
-      vmath.Vector3(0, 0, 100),    // 0: Nose
-      vmath.Vector3(0, 0, -40),    // 1: Tail
-      vmath.Vector3(-60, 10, -30), // 2: WingLeft
-      vmath.Vector3(60, 10, -30),  // 3: WingRight
-      vmath.Vector3(0, -20, -10),  // 4: Keel
-    ];
-
-    List<Offset> proj = [];
-    List<double> depth = [];
-
-    for (final p in pts) {
-      vmath.Vector4 v = vmath.Vector4(p.x, p.y, p.z, 1.0);
-      v = transform.transform(v);
-      
-      double w = v.w;
-      if (w == 0) w = 0.001;
-      
-      proj.add(Offset(v.x / w, v.y / w));
-      depth.add(v.z / w); 
-    }
-
-    final List<List<int>> edges = [
-      [0, 1], // Nose -> Tail
-      [0, 2], // Nose -> WingLeft
-      [0, 3], // Nose -> WingRight
-      [0, 4], // Nose -> Keel
-      [1, 2], // Tail -> WingLeft
-      [1, 3], // Tail -> WingRight
-      [1, 4], // Tail -> Keel
-      [2, 4], // WingLeft -> Keel
-      [3, 4], // WingRight -> Keel
-    ];
-
-    // Depth sorting
-    final List<List<int>> sortedEdges = List.from(edges)
-      ..sort((a, b) {
-        double zA = (depth[a[0]] + depth[a[1]]) / 2;
-        double zB = (depth[b[0]] + depth[b[1]]) / 2;
-        return zB.compareTo(zA);
-      });
-
-    final Paint linePaint = Paint()
-      ..color = const Color(0xFF6B7280) // matte grey
+    // Grid lines inside the vial
+    final Paint gridPaint = Paint()
+      ..color = inactiveColor
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
-
-    final Paint lineGlowPaint = Paint()
-      ..color = const Color(0xFF6B7280).withValues(alpha: 0.2)
-      ..strokeWidth = 3.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2)
-      ..style = PaintingStyle.stroke;
-
-    for (final edge in sortedEdges) {
-      int idx1 = edge[0];
-      int idx2 = edge[1];
-      
-      canvas.drawLine(proj[idx1], proj[idx2], lineGlowPaint);
-      canvas.drawLine(proj[idx1], proj[idx2], linePaint);
-    }
     
-    final Paint vertexGlow = Paint()
-      ..color = const Color(0xFFD97706).withValues(alpha: 0.6)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
-      
-    final Paint vertexCore = Paint()
-      ..color = const Color(0xFFD97706)
-      ..style = PaintingStyle.fill;
+    canvas.drawLine(Offset(cx - maxRadius, cy), Offset(cx + maxRadius, cy), gridPaint);
+    canvas.drawLine(Offset(cx, cy - maxRadius), Offset(cx, cy + maxRadius), gridPaint);
 
-    for (int i = 0; i < pts.length; i++) {
-      canvas.drawCircle(proj[i], 6, vertexGlow);
-      canvas.drawCircle(proj[i], 2, vertexCore);
+    // Draw concentric circles
+    canvas.drawCircle(Offset(cx, cy), maxRadius, gridPaint);
+    canvas.drawCircle(Offset(cx, cy), maxRadius * 0.6, gridPaint);
+    canvas.drawCircle(Offset(cx, cy), maxRadius * 0.2, Paint()
+      ..color = activeColor.withOpacity(0.5)
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke);
+
+    // Calculate bubble position
+    // Bubble moves opposite to tilt for realism (like an air bubble in water)
+    // Actually, if device tilts left (roll < 0), bubble moves right.
+    // If device tilts up (pitch > 0), bubble moves down.
+    double clampRoll = roll.clamp(-maxAngle, maxAngle);
+    double clampPitch = pitch.clamp(-maxAngle, maxAngle);
+    
+    double dx = -(clampRoll / maxAngle) * maxRadius;
+    double dy = -(clampPitch / maxAngle) * maxRadius;
+
+    // Make sure bubble stays inside the circle (euclidean clamping)
+    final double dist = math.sqrt(dx * dx + dy * dy);
+    final double bubbleRadius = maxRadius * 0.15;
+    final double maxMove = maxRadius - bubbleRadius;
+    
+    if (dist > maxMove) {
+      dx = dx / dist * maxMove;
+      dy = dy / dist * maxMove;
+    }
+
+    final Offset bubblePos = Offset(cx + dx, cy + dy);
+
+    // Bubble glow
+    final Paint bubbleGlow = Paint()
+      ..color = activeColor.withOpacity(0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(bubblePos, bubbleRadius * 1.5, bubbleGlow);
+
+    // Inner bubble
+    final Paint bubblePaint = Paint()
+      ..color = activeColor
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(bubblePos, bubbleRadius, bubblePaint);
+    
+    // Bubble highlight
+    final Paint highlight = Paint()
+      ..color = Colors.white.withOpacity(0.6)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(bubblePos + Offset(-bubbleRadius*0.3, -bubbleRadius*0.3), bubbleRadius * 0.25, highlight);
+
+    // Draw text overlays for current angles
+    _drawText(canvas, 'PITCH: ${pitch.toStringAsFixed(1)}°', Offset(cx, cy + maxRadius + 40), activeColor);
+    _drawText(canvas, 'ROLL: ${roll.toStringAsFixed(1)}°', Offset(cx, cy + maxRadius + 70), activeColor);
+    if (isLevel) {
+      _drawText(canvas, 'PERFECTLY LEVEL', Offset(cx, cy - maxRadius - 50), Colors.greenAccent, isBold: true);
     }
   }
 
+  void _drawText(Canvas canvas, String text, Offset center, Color color, {bool isBold = false}) {
+    final textSpan = TextSpan(
+      text: text,
+      style: TextStyle(
+        color: color,
+        fontSize: 16,
+        fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+        fontFamily: 'Inter',
+        letterSpacing: 2.0,
+      ),
+    );
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy - textPainter.height / 2));
+  }
+
   @override
-  bool shouldRepaint(covariant DeviceRotationPainter oldDelegate) {
-    return oldDelegate.x != x || oldDelegate.y != y || oldDelegate.z != z;
+  bool shouldRepaint(covariant BubbleLevelPainter oldDelegate) {
+    return oldDelegate.roll != roll || oldDelegate.pitch != pitch;
   }
 }

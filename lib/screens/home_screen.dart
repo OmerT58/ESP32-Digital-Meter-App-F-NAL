@@ -1,4 +1,4 @@
-/// home_screen.dart — Landscape-aware AR screen with animated neon strip
+﻿/// home_screen.dart — Landscape-aware AR screen with animated neon strip
 library;
 
 import 'dart:async';
@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/measurement_provider.dart';
 import '../models/settings_provider.dart';
-import '../painters/neon_strip_painter.dart';
+import '../painters/drawing_painter.dart';
 import '../services/ble_service.dart';
 import '../services/camera_service.dart';
 import '../services/laser_tracking_service.dart';
@@ -24,70 +24,28 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-<<<<<<< HEAD
-    with TickerProviderStateMixin {
-  // Looping strip animation — 1 second cycle drives the dash conveyor belt
-  late final AnimationController _stripAnim;
-  // Legacy rotation animation kept for any future use
-  late final AnimationController _rotAnim;
-
-  StreamSubscription? _bleSub;
-  Size _currentSize  = Size.zero;
-  bool _isLandscape  = false;
-=======
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _anim;
+class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription? _bleSub;
   Size _currentSize = Size.zero;
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
+  bool _isLandscape = false;
 
   @override
   void initState() {
     super.initState();
-<<<<<<< HEAD
-    _stripAnim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat();
-
-    _rotAnim = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CameraService>().initialize();
       final ble     = context.read<BleService>();
       final tracker = context.read<LaserTrackingService>();
       _bleSub = ble.dataStream.listen((data) {
-        if (tracker.isSnapshotMode) {
-          tracker.updateSnapshotDrawing(
-              data, _currentSize, isLandscape: _isLandscape);
-        }
+        // Always update — crosshair must be visible even outside snapshot mode
+        tracker.updateSnapshotDrawing(
+            data, _currentSize, isLandscape: _isLandscape);
       });
-=======
-    _anim = AnimationController(
-        vsync: this, duration: const Duration(seconds: 3))
-      ..repeat();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-        context.read<CameraService>().initialize();
-        final ble = context.read<BleService>();
-        final tracker = context.read<LaserTrackingService>();
-        _bleSub = ble.dataStream.listen((data) {
-          if (tracker.isSnapshotMode) {
-             tracker.updateSnapshotDrawing(data, _currentSize);
-          }
-        });
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
     });
   }
 
-  @override
-<<<<<<< HEAD
   void dispose() {
-    _stripAnim.dispose();
-    _rotAnim.dispose();
     _bleSub?.cancel();
     super.dispose();
   }
@@ -101,33 +59,14 @@ class _HomeScreenState extends State<HomeScreen>
       return Offset(kSidebarWidth + usableWidth / 2, size.height / 2);
     }
     return Offset(size.width / 2, (size.height * 0.8) / 2);
-=======
-  void dispose() { 
-    _anim.dispose(); 
-    _bleSub?.cancel();
-    super.dispose(); 
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
   }
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
     final cam     = context.watch<CameraService>();
     final ble     = context.watch<BleService>();
     final mp      = context.watch<MeasurementProvider>();
     final s       = context.watch<SettingsProvider>();
-    final tracker = context.watch<LaserTrackingService>();
-=======
-    final cam = context.watch<CameraService>();
-    final ble = context.watch<BleService>();
-    final mp  = context.watch<MeasurementProvider>();
-    final s   = context.watch<SettingsProvider>();
-    final tracker = context.watch<LaserTrackingService>();
-    final size = MediaQuery.sizeOf(context);
-    _currentSize = size;
-    
-    final effectiveCenter = Offset(size.width / 2, (size.height * 0.8) / 2);
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -145,17 +84,13 @@ class _HomeScreenState extends State<HomeScreen>
             children: [
               // ── Camera background (full-screen cover) ────────────
               _CameraBackground(camera: cam),
-<<<<<<< HEAD
 
               // ── AR tap capture ────────────────────────────────────
-=======
-              // ── AR laser overlay + tap capture ─────────────────
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
               GestureDetector(
                 onTapDown: (d) {
+                  final tracker = context.read<LaserTrackingService>();
                   if (mp.mode.name == 'geometric') {
                     if (tracker.trackedCentroid != null) {
-<<<<<<< HEAD
                       mp.capture(Offset(
                         (effectiveCenter.dx + tracker.trackedCentroid!.dx) /
                             size.width,
@@ -176,124 +111,115 @@ class _HomeScreenState extends State<HomeScreen>
                         (effectiveCenter.dy + tracker.trackedCentroid!.dy) /
                             size.height,
                       ));
-=======
-                       // Capture the tracked dot normalized coordinates
-                       final pt = Offset(
-                         (effectiveCenter.dx + tracker.trackedCentroid!.dx) / size.width,
-                         (effectiveCenter.dy + tracker.trackedCentroid!.dy) / size.height,
-                       );
-                       mp.capture(pt);
-                    } else {
-                       mp.capture(Offset(
-                         d.localPosition.dx / size.width,
-                         d.localPosition.dy / size.height,
-                       ));
-                    }
-                  } else {
-                    if (tracker.trackedCentroid != null) {
-                       final pt = Offset(
-                         (effectiveCenter.dx + tracker.trackedCentroid!.dx) / size.width,
-                         (effectiveCenter.dy + tracker.trackedCentroid!.dy) / size.height,
-                       );
-                       mp.capture(pt);
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
                     }
                   }
                 },
                 child: const SizedBox.expand(),
               ),
 
-<<<<<<< HEAD
               // ── Laser tracking (background service) ──────────────
               if (cam.isInitialized)
                 _LaserTrackingOverlay(
                   cam: cam,
                   ble: ble,
-                  tracker: tracker,
+                  tracker: context.read<LaserTrackingService>(),
                   effectiveCenter: effectiveCenter,
-=======
-              // ── Tracking overlay ───────────────────────────────
-              if (cam.isInitialized)
-                 _LaserTrackingOverlay(cam: cam, ble: ble, tracker: tracker, effectiveCenter: effectiveCenter),
-
-              // ── Elegant center reticle & status text ─────────────
-              _MinimalReticle(color: s.laserColor, tracker: tracker, effectiveCenter: effectiveCenter),
-
-              // ── Snapshot Drawing Overlay (permanent lines) ──────────
-              if (tracker.isSnapshotMode)
-                CustomPaint(
-                  size: Size.infinite,
-                  painter: _DrawingPainter(path: tracker.drawingPath),
                 ),
 
-              // ── Two-Tap preview line (dashed, from A to live pos) ───
-              if (tracker.isSnapshotMode && tracker.isTwoTapMode && tracker.twoTapPointA != null && tracker.livePreviewPoint != null)
-                CustomPaint(
-                  size: Size.infinite,
-                  painter: _PreviewLinePainter(
-                    from: tracker.twoTapPointA!,
-                    to: tracker.livePreviewPoint!,
-                  ),
-                ),
-
-              // ── Mode toggle pill (Continuous / Two-Tap) ─────────────
-              if (tracker.isSnapshotMode)
-                Positioned(
-                  top: effectiveCenter.dy + 30,
-                  left: 0, right: 0,
-                  child: Center(
-                    child: _DrawModeToggle(tracker: tracker),
-                  ),
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
-                ),
-
-              // ── Animated neon strip drawing ───────────────────────
-              if (tracker.isSnapshotMode && tracker.drawingPath.length >= 2)
-                AnimatedBuilder(
-                  animation: _stripAnim,
-                  builder: (_, __) => CustomPaint(
-                    size: Size.infinite,
-                    painter: NeonStripPainter(
-                      path: List.unmodifiable(tracker.drawingPath),
-                      animValue: _stripAnim.value,
+              // ── Layer 3: Continuous drawing lines ──────────────────────────
+              // Always present above camera so the Test-mode hard stop works.
+                            Consumer<LaserTrackingService>(
+                builder: (context, tracker, child) {
+                  if (tracker.selectedShape == 'Test') return const SizedBox.shrink();
+                  final path = tracker.drawingPath;
+                  if (path.length < 2) return const SizedBox.shrink();
+                  return SizedBox.expand(
+                    child: CustomPaint(
+                      painter: SolidLinePainter(
+                        path: List.of(path),
+                        color: s.laserColor,
+                        selectedShape: tracker.selectedShape,
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
+              ),
 
-              // ── Two-Tap animated preview line ─────────────────────
-              if (tracker.isSnapshotMode &&
-                  tracker.isTwoTapMode &&
-                  tracker.twoTapPointA != null &&
-                  tracker.livePreviewPoint != null)
-                AnimatedBuilder(
-                  animation: _stripAnim,
-                  builder: (_, __) => CustomPaint(
-                    size: Size.infinite,
-                    painter: NeonPreviewLinePainter(
-                      from: tracker.twoTapPointA!,
-                      to:   tracker.livePreviewPoint!,
-                      animValue: _stripAnim.value,
+              // ── Layer 4: Two-Tap shape / preview line ─────────────────────
+              Consumer<LaserTrackingService>(
+                builder: (context, tracker, child) {
+                  if (!tracker.isTwoTapMode) return const SizedBox.shrink();
+                  if (tracker.twoTapPointA != null && tracker.twoTapPointB != null) {
+                    return SizedBox.expand(
+                      child: CustomPaint(
+                        painter: ShapePainter(
+                          pointA: tracker.twoTapPointA!,
+                          pointB: tracker.twoTapPointB!,
+                          shape:  tracker.selectedShape,
+                          color:  s.laserColor,
+                        ),
+                      ),
+                    );
+                  }
+                  if (tracker.twoTapPointA != null && tracker.livePreviewPoint != null) {
+                    return SizedBox.expand(
+                      child: CustomPaint(
+                        painter: PreviewLinePainter(
+                          from:  tracker.twoTapPointA!,
+                          to:    tracker.livePreviewPoint!,
+                          color: s.laserColor,
+                        ),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+
+
+              // ── Layer 5: Flying Pointer crosshair ────────────────────────
+              Consumer<LaserTrackingService>(
+                builder: (context, tracker, child) {
+                  return SizedBox.expand(
+                    child: CustomPaint(
+                      painter: FlyingPointerPainter(
+                        position: tracker.pointerPosition,
+                        color: s.laserColor,
+                      ),
                     ),
-                  ),
-                ),
-
-              // ── Center reticle & status text ──────────────────────
-              _MinimalReticle(
-                color: s.laserColor,
-                tracker: tracker,
-                effectiveCenter: effectiveCenter,
-                isLandscape: isLandscape,
-                size: size,
+                  );
+                },
               ),
 
               // ── Top bar (BLE + Mode 1/2 + nav) ────────────────────
               const TopBar(),
 
-              // ── Adaptive bottom drawer / landscape sidebar ─────────
+              // Adaptive bottom drawer / landscape sidebar
+              // Always visible in ALL modes so user can switch shapes.
               if (!isLandscape)
                 const CameraControls()
               else
-                _LandscapeSidebar(mp: mp, ble: ble, tracker: tracker),
+                Consumer<LaserTrackingService>(
+                  builder: (context, tracker, child) {
+                    return _LandscapeSidebar(mp: mp, ble: ble, tracker: tracker);
+                  },
+                ),
+
+              // ── FOV Tuner — right edge, vertically centered ────────
+              Consumer<LaserTrackingService>(
+                builder: (context, tracker, child) {
+                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                  return Positioned(
+                    right: 8,
+                    top: 0,
+                    bottom: 0,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: _FovTuner(tracker: tracker, isDark: isDark),
+                    ),
+                  );
+                },
+              ),
             ],
           );
         },
@@ -302,258 +228,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 }
 
-<<<<<<< HEAD
-// ── Minimal center crosshair & status text ────────────────────────
-class _MinimalReticle extends StatelessWidget {
-  const _MinimalReticle({
-    required this.color,
-    required this.tracker,
-    required this.effectiveCenter,
-    required this.isLandscape,
-    required this.size,
-  });
-  final Color                color;
-  final LaserTrackingService tracker;
-  final Offset               effectiveCenter;
-  final bool                 isLandscape;
-  final Size                 size;
+// (Length overlay removed — measurements shown in the bottom drawer only)
 
-  @override
-  Widget build(BuildContext context) {
-    final isRecording = tracker.isRecording;
-    final onTarget    = tracker.status == 'On Target';
 
-    String statusText  = 'TARGET OFF';
-    Color  statusColor = AppColors.offline.withOpacity(0.8);
-    if (isRecording) {
-      statusText  = 'RECORDING';
-      statusColor = Colors.redAccent;
-    } else if (onTarget) {
-      statusText  = 'TARGET ON';
-      statusColor = AppColors.accentGreen;
-    }
-
-    final statusWidget = Text(
-      statusText,
-      style: AppTextStyles.inter(
-        size: 14, weight: FontWeight.bold,
-        color: statusColor, letterSpacing: 1.2,
-      ),
-=======
-// ── Minimal center crosshair & Status ────────────────────────────
-/// A clean, professional reticle and dynamic status text.
-class _MinimalReticle extends StatelessWidget {
-  const _MinimalReticle({required this.color, required this.tracker, required this.effectiveCenter});
-  final Color color;
-  final LaserTrackingService tracker;
-  final Offset effectiveCenter;
-
-  @override
-  Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final bool isRecording = tracker.isRecording;
-    final bool onTarget = tracker.status == 'On Target';
-
-    String statusText = 'TARGET OFF';
-    Color statusColor = AppColors.offline.withOpacity(0.8);
-
-    if (isRecording) {
-      statusText = 'RECORDING';
-      statusColor = Colors.redAccent;
-    } else if (onTarget) {
-      statusText = 'TARGET ON';
-      statusColor = AppColors.accentGreen;
-    }
-
-    return Stack(
-      children: [
-        // Crosshair centered on the effectiveCenter
-        Positioned(
-          top: effectiveCenter.dy - 14,
-          left: effectiveCenter.dx - 14,
-          child: SizedBox(
-            width: 28, height: 28,
-            child: CustomPaint(painter: _ReticlePainter(color: color)),
-          ),
-        ),
-        
-        // Status text positioned ~20px above the bottom drawer (which starts at 80% height)
-        Positioned(
-          bottom: (screenSize.height * 0.2) + 20,
-          left: 0, right: 0,
-          child: Center(
-            child: Text(
-              statusText,
-              style: AppTextStyles.inter(
-                size: 14,
-                weight: FontWeight.bold,
-                color: statusColor,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ),
-        ),
-        
-        // Measurement Result Overlay
-        if (tracker.measuredDistanceCm != null)
-          Positioned(
-            top: 100, // Below TopBar
-            left: 0, right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.accentGreen.withOpacity(0.5)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.accentGreen.withOpacity(0.2),
-                      blurRadius: 10,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Text(
-                  'Length: ${tracker.measuredDistanceCm!.toStringAsFixed(1)} cm',
-                  style: AppTextStyles.inter(
-                    size: 24,
-                    weight: FontWeight.bold,
-                    color: AppColors.accentGreen,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
-    );
-
-    return Stack(
-      children: [
-        // Crosshair centred on effectiveCenter
-        Positioned(
-          top:  effectiveCenter.dy - 14,
-          left: effectiveCenter.dx - 14,
-          child: SizedBox(
-            width: 28, height: 28,
-            child: CustomPaint(painter: _ReticlePainter(color: color)),
-          ),
-        ),
-
-        // Status text
-        if (isLandscape)
-          Positioned(
-            left: kSidebarWidth + 12,
-            top:  effectiveCenter.dy + 20,
-            child: statusWidget,
-          )
-        else
-          Positioned(
-            bottom: (size.height * 0.2) + 20,
-            left: 0, right: 0,
-            child: Center(child: statusWidget),
-          ),
-
-        // Measurement result overlay
-        if (tracker.measuredDistanceCm != null)
-          Positioned(
-            top:  100,
-            left: isLandscape ? kSidebarWidth + 16 : 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.accentGreen.withOpacity(0.5)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.accentGreen.withOpacity(0.2),
-                      blurRadius: 10, spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Text(
-                  'Length: ${tracker.measuredDistanceCm!.toStringAsFixed(1)} cm',
-                  style: AppTextStyles.inter(
-                    size: 24, weight: FontWeight.bold,
-                    color: AppColors.accentGreen,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _ReticlePainter extends CustomPainter {
-  _ReticlePainter({required this.color});
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width  / 2;
-    final cy = size.height / 2;
-    const length = 10.0;
-    const thick  = 1.0;
-
-<<<<<<< HEAD
-    final glowPaint = Paint()
-      ..color       = color.withOpacity(0.4)
-      ..strokeWidth = thick + 2.0
-      ..strokeCap   = StrokeCap.round
-      ..maskFilter  = const MaskFilter.blur(BlurStyle.normal, 2.0);
-    final paint = Paint()
-      ..color       = color
-=======
-    const length = 10.0;
-    const thick = 1.0;
-
-    final glowPaint = Paint()
-      ..color = color.withOpacity(0.4)
-      ..strokeWidth = thick + 2.0
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
-
-    final paint = Paint()
-      ..color = color
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
-      ..strokeWidth = thick
-      ..strokeCap   = StrokeCap.round;
-
-<<<<<<< HEAD
-    canvas.drawLine(
-        Offset(cx, cy - length), Offset(cx, cy + length), glowPaint);
-    canvas.drawLine(
-        Offset(cx - length, cy), Offset(cx + length, cy), glowPaint);
-    canvas.drawLine(
-        Offset(cx, cy - length), Offset(cx, cy + length), paint);
-    canvas.drawLine(
-        Offset(cx - length, cy), Offset(cx + length, cy), paint);
-=======
-    // Draw subtle glow
-    canvas.drawLine(Offset(cx, cy - length), Offset(cx, cy + length), glowPaint);
-    canvas.drawLine(Offset(cx - length, cy), Offset(cx + length, cy), glowPaint);
-
-    // Draw sharp core
-    canvas.drawLine(Offset(cx, cy - length), Offset(cx, cy + length), paint);
-    canvas.drawLine(Offset(cx - length, cy), Offset(cx + length, cy), paint);
-
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
-    canvas.drawCircle(Offset(cx, cy), 1.0, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(covariant _ReticlePainter old) => old.color != color;
-}
-
-<<<<<<< HEAD
 // ── Laser tracking overlay (background image processor) ──────────
 class _LaserTrackingOverlay extends StatefulWidget {
   const _LaserTrackingOverlay({
@@ -566,15 +243,6 @@ class _LaserTrackingOverlay extends StatefulWidget {
   final BleService           ble;
   final LaserTrackingService tracker;
   final Offset               effectiveCenter;
-=======
-// ── Tracking overlay ─────────────────────────────────────────────
-class _LaserTrackingOverlay extends StatefulWidget {
-  const _LaserTrackingOverlay({required this.cam, required this.ble, required this.tracker, required this.effectiveCenter});
-  final CameraService cam;
-  final BleService ble;
-  final LaserTrackingService tracker;
-  final Offset effectiveCenter;
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
 
   @override
   State<_LaserTrackingOverlay> createState() => _LaserTrackingOverlayState();
@@ -585,12 +253,8 @@ class _LaserTrackingOverlayState extends State<_LaserTrackingOverlay> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-<<<<<<< HEAD
       widget.cam
           .startTracking((img) => widget.tracker.processImage(img, widget.ble));
-=======
-      widget.cam.startTracking((img) => widget.tracker.processImage(img, widget.ble));
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
     });
   }
 
@@ -601,145 +265,10 @@ class _LaserTrackingOverlayState extends State<_LaserTrackingOverlay> {
   }
 
   @override
-<<<<<<< HEAD
   Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 // ── Camera background ─────────────────────────────────────────────
-=======
-  Widget build(BuildContext context) {
-    return const SizedBox.shrink(); // Logic is handled in background, UI is clean
-  }
-}
-
-// ── Draw Mode Toggle pill ──────────────────────────────────────────
-class _DrawModeToggle extends StatelessWidget {
-  const _DrawModeToggle({required this.tracker});
-  final LaserTrackingService tracker;
-
-  @override
-  Widget build(BuildContext context) {
-    final isTwoTap = tracker.isTwoTapMode;
-    return GestureDetector(
-      onTap: () {
-        tracker.setTwoTapMode(!isTwoTap);
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        decoration: BoxDecoration(
-          color: isTwoTap
-              ? Colors.cyanAccent.withOpacity(0.18)
-              : Colors.white.withOpacity(0.10),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(
-            color: isTwoTap ? Colors.cyanAccent : Colors.white30,
-            width: 1.2,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isTwoTap ? Icons.linear_scale_rounded : Icons.gesture_rounded,
-              size: 16,
-              color: isTwoTap ? Colors.cyanAccent : Colors.white70,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              isTwoTap ? 'TWO-TAP' : 'CONTINUOUS',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: isTwoTap ? Colors.cyanAccent : Colors.white70,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DrawingPainter extends CustomPainter {
-  _DrawingPainter({required this.path});
-  final List<Offset> path;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (path.isEmpty) return;
-
-    final paint = Paint()
-      ..color = Colors.cyanAccent
-      ..strokeWidth = 3.0
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-
-    final glow = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.4)
-      ..strokeWidth = 6.0
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
-
-    final p = Path();
-    p.moveTo(path.first.dx, path.first.dy);
-    for (int i = 1; i < path.length; i++) {
-      p.lineTo(path[i].dx, path[i].dy);
-    }
-    
-    canvas.drawPath(p, glow);
-    canvas.drawPath(p, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _DrawingPainter oldDelegate) => true;
-}
-
-// ── Preview line painter (Two-Tap mode) ───────────────────────────
-class _PreviewLinePainter extends CustomPainter {
-  _PreviewLinePainter({required this.from, required this.to});
-  final Offset from;
-  final Offset to;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final dashPaint = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.65)
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    // Draw dashed line
-    const dashLen = 10.0;
-    const gapLen  = 6.0;
-    final total = (to - from).distance;
-    if (total < 1) return;
-    final dir = (to - from) / total;
-    double covered = 0;
-    while (covered < total) {
-      final segEnd = (covered + dashLen).clamp(0.0, total);
-      canvas.drawLine(from + dir * covered, from + dir * segEnd, dashPaint);
-      covered += dashLen + gapLen;
-    }
-
-    // Dot at Point A
-    canvas.drawCircle(from, 5,
-      Paint()..color = Colors.cyanAccent
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
-  }
-
-  @override
-  bool shouldRepaint(covariant _PreviewLinePainter o) =>
-      o.from != from || o.to != to;
-}
-
-// ── Camera background ────────────────────────────────────────────
->>>>>>> 0603b4c11bdf8cd3d14e798584dbc93e36792e21
 class _CameraBackground extends StatelessWidget {
   const _CameraBackground({required this.camera});
   final CameraService camera;
@@ -978,6 +507,87 @@ class _LandscapeMeasureBtn extends StatelessWidget {
                 size: 22, color: Colors.white),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── FOV Tuner — right-edge floating sensitivity panel ────────────────────────
+class _FovTuner extends StatelessWidget {
+  const _FovTuner({required this.tracker, required this.isDark});
+  final LaserTrackingService tracker;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF0F1117).withOpacity(0.80)
+            : Colors.white.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.accent.withOpacity(0.18),
+            blurRadius: 14,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'FOV',
+            style: AppTextStyles.inter(
+              size: 8,
+              weight: FontWeight.w700,
+              color: isDark ? Colors.white54 : Colors.black45,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Arttır (+)
+          GestureDetector(
+            onTap: () => tracker.adjustSensitivity(0.5),
+            child: Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withOpacity(0.18),
+              ),
+              child: const Icon(Icons.add, size: 18, color: AppColors.accent),
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Anlık değer
+          Text(
+            tracker.sensitivityMultiplier.toStringAsFixed(1),
+            style: AppTextStyles.inter(
+              size: 12,
+              weight: FontWeight.w700,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Azalt (-)
+          GestureDetector(
+            onTap: () => tracker.adjustSensitivity(-0.5),
+            child: Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withOpacity(0.18),
+              ),
+              child: const Icon(Icons.remove, size: 18, color: AppColors.accent),
+            ),
+          ),
+        ],
       ),
     );
   }
